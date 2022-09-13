@@ -7,7 +7,7 @@ from slack import WebClient
 from constants import *
 from global_store import GlobalStore
 
-slack_client = WeblClient(SLACK_BOT_TOKEN)
+slack_client = WebClient(SLACK_BOT_TOKEN)
 
 def handle_command(command, channel):
     """
