@@ -4,6 +4,7 @@ import time
 import requests
 import random
 from slack import WebClient
+from slack import RTMClient
 from constants import *
 from global_store import GlobalStore
 
@@ -170,20 +171,8 @@ def send_attachment_message(attachment, channel):
 def delete_message(timestamp, channel):
     """ Deletes a message using the Slack Web API """
 
-    options = {
-        'token': SLACK_USER_TOKEN,
-        'channel': channel,
-        'ts': timestamp,
-        'as_user': True
-    }
-
-    try:
-        requests.post('https://slack.com/api/chat.delete', params=options)
-
-    except requests.exceptions.RequestException as error:
-        print(error)
-
-    config.increment()
+    response = WebClient(SLACK_USER_TOKEN).chat_delete(channel=channel, ts=timestamp, as_user=True)
+    print(response.json())
 
 
 def moderate_message(timestamp, channel, text):
@@ -208,7 +197,6 @@ def get_channel_list():
 
     except requests.exceptions.RequestException as error:
         request_json = {}
-        print(error)
 
     return request_json
 
@@ -236,52 +224,67 @@ def parse_slack_output(slack_rtm_output):
         based on its ID.
     """
     output_list = slack_rtm_output
-    if output_list and len(output_list) > 0:
-        for output in output_list:
 
-            # If the channel name is not found in the whitelist, the bot removes its self.
-            # This functionality requires the channels:read and channels:write permissions.
-            if 'type' in output.keys() and output['type'] == 'channel_joined' and CHANNEL_WHITELIST is not None:
-                channel_white_list = CHANNEL_WHITELIST.strip().split(',')
-                channel_list = get_channel_list()
+    if output_list['subtype'] == 'bot_message' and output_list['user'] == 'USLACKBOT' :
+        delete_message(output_list['ts'], output_list['channel'])
 
-                if 'channels' in channel_list.keys():
-                    for channel in channel_list['channels']:
-                        if channel['name'] not in channel_white_list:
-                            remove_from_channel(BOT_ID, channel['id'])
 
-            # Handles message types
-            if 'type' in output.keys() and output['type'] == 'message':
-                if 'subtype' in output.keys() and output['subtype'] == 'slackbot_response':
-                    if 'channel' in output.keys() and 'ts' in output.keys():
-                        if config.state_in_channel(output['channel']) == State.DESTROYING:
-                            delete_message(output['ts'], output['channel'])
-                        elif config.state_in_channel(output['channel']) == State.MODERATING:
-                            moderate_message(output['ts'], output['channel'], output.get('text', ''))
-                    if 'text' in output.keys():
-                        config.add_response(output['text'])
+    # if output_list and len(output_list) > 0:
+    #     for output in output_list:
+    #         print('2')
+    #         print(output)
+    #         print(output.keys())
 
-                if output and 'text' in output and AT_BOT in output['text']:
-                    # Return text after the @ mention, whitespace removed
-                    return output['text'].split(AT_BOT)[1].strip(), \
-                        output['channel']
+    #         # If the channel name is not found in the whitelist, the bot removes its self.
+    #         # This functionality requires the channels:read and channels:write permissions.
+    #         if 'type' in output.keys() and output['type'] == 'channel_joined' and CHANNEL_WHITELIST is not None:
+    #             channel_white_list = CHANNEL_WHITELIST.strip().split(',')
+    #             channel_list = get_channel_list()
+
+    #             if 'channels' in channel_list.keys():
+    #                 for channel in channel_list['channels']:
+    #                     if channel['name'] not in channel_white_list:
+    #                         remove_from_channel(BOT_ID, channel['id'])
+
+    #         # Handles message types
+    #         if 'type' in output.keys() and output['type'] == 'message':
+    #             if 'subtype' in output.keys() and output['subtype'] == 'slackbot_response':
+    #                 if 'channel' in output.keys() and 'ts' in output.keys():
+    #                     if config.state_in_channel(output['channel']) == State.DESTROYING:
+    #                         delete_message(output['ts'], output['channel'])
+    #                     elif config.state_in_channel(output['channel']) == State.MODERATING:
+    #                         moderate_message(output['ts'], output['channel'], output.get('text', ''))
+    #                 if 'text' in output.keys():
+    #                     config.add_response(output['text'])
+
+    #             if output and 'text' in output and AT_BOT in output['text']:
+    #                 # Return text after the @ mention, whitespace removed
+    #                 return output['text'].split(AT_BOT)[1].strip(), \
+    #                     output['channel']
     return None, None
 
 
-if __name__ == "__main__":
-    global config
-    READ_WEBSOCKET_DELAY = 1
-    if slack_client.rtm_connect():
-        print('Connected to RTM')
-        config = GlobalStore()
-        config.load()
-        print(config)
-        print('Launch successful, waiting for input...')
+@RTMClient.run_on(event='message')
+def wow(**payload):
+    result = parse_slack_output(payload['data'])
 
-        while True:
-            command, channel = parse_slack_output(slack_client.rtm_read())
-            if command and channel:
-                handle_command(command, channel)
-            time.sleep(READ_WEBSOCKET_DELAY)
-    else:
-        print("Connection failed. This is likely due to an invalid Slack token or Bot ID.")
+
+if __name__ == "__main__":
+    rtm_client = RTMClient(token=SLACK_BOT_TOKEN)
+    rtm_client.start()
+    # global config
+    # READ_WEBSOCKET_DELAY = 1
+    # if slack_client.rtm_connect():
+    #     print('Connected to RTM')
+    #     config = GlobalStore()
+    #     config.load()
+    #     print(config)
+    #     print('Launch successful, waiting for input...')
+
+    #     while True:
+    #         command, channel = parse_slack_output(slack_client.rtm_read())
+    #         if command and channel:
+    #             handle_command(command, channel)
+    #         time.sleep(READ_WEBSOCKET_DELAY)
+    # else:
+    #     print("Connection failed. This is likely due to an invalid Slack token or Bot ID.")
