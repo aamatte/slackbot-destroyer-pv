@@ -3,11 +3,11 @@
 import time
 import requests
 import random
-from slackclient import SlackClient
+from slack import WebClient
 from constants import *
 from global_store import GlobalStore
 
-slack_client = SlackClient(SLACK_BOT_TOKEN)
+slack_client = WeblClient(SLACK_BOT_TOKEN)
 
 def handle_command(command, channel):
     """
